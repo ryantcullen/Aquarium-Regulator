@@ -7,7 +7,6 @@
 
 #define ADC_MAX_COUNT    4095.0f
 #define SENSOR_MAX_VOLT  2.3f
-int x = 0;
 
 // On-board LED (LD2) on PA5
 #define LED_PIN       5
