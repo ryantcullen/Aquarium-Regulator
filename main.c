@@ -5,20 +5,17 @@
 #include "SysClock.h"
 #include "LED.h"        
 
-#define ADC_MAX_COUNT    4095.0f
-#define SENSOR_MAX_VOLT  2.3f
-
-// On-board LED (LD2) on PA5
-#define LED_PIN       5
-// On-board USER button (B1/UB1) on PC13
-#define BUTTON_PIN   13
+// Static Values
+#define ADC_MAX_COUNT    	4095.0f   // ADC bit resolution
+#define LED_PIN       		5					// LD2 on board LED
+#define BUTTON_PIN  			13				// UB1 on board button
 
 // Variables
-volatile float   ADC_1;
-volatile float   ADC_2;
-volatile float   ADC_3;
-volatile float   voltage;
-volatile float   tds_ppm;
+volatile float   ADC_1;							// Output from 1st ADC channel
+volatile float   ADC_2;							// Output from 2nd ADC channel
+volatile float   ADC_3;							// Output from 1st ADC channel
+volatile float   tds_ppm;						// Final TDS reading
+volatile float   temperature;				// Final temeprature reading
 volatile uint8_t sensorMode = 0;    // 0 = TDS, 1 = Temperature
 
 // GPIO + EXTI prototypes
@@ -73,13 +70,13 @@ void EXTI15_10_IRQHandler(void) {
 
 // TDS Sensor
 void TDSSensor(void) {
-    // select PA1 ? ADC12_IN6
+    // select PA1 -> ADC12_IN6
     ADC_Select_Channel(6);
     ADC1->CR |= ADC_CR_ADSTART;
     while (!(ADC123_COMMON->CSR & ADC_CSR_EOC_MST));
     ADC_1 = ADC1->DR;
 
-    voltage = (ADC_1 / ADC_MAX_COUNT) * SENSOR_MAX_VOLT;
+    float voltage = (ADC_1 / ADC_MAX_COUNT) * 2.3f;
     tds_ppm  = (22.06f  * voltage * voltage * voltage)
              + (177.8f * voltage * voltage)
              + (353.1f * voltage)
@@ -115,7 +112,7 @@ void WaterLevel(void) {
 
 // Temperature Sensor
 void Temperature(void) {
-    // select PA2 ? ADC12_IN7
+    // select PA2 -> ADC12_IN7
     ADC_Select_Channel(7);
     ADC1->CR |= ADC_CR_ADSTART;
     while (!(ADC123_COMMON->CSR & ADC_CSR_EOC_MST));
