@@ -126,8 +126,8 @@ void Temperature(void) {
 // Initialization and pin configuration
 void Initialize()
 {
-	  System_Clock_Init();    //clock
-    ADC_Init();						  //ADC
+	  System_Clock_Init();    // clock
+    ADC_Init();						  // ADC
     LEDs_Init();					  // External LEDs
     configure_LED2_pin();   // LD2 (for debugging)
     configure_button_pin(); // UB1 to toggle between sensor modes
