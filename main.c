@@ -5,59 +5,51 @@
 #include "SysClock.h"
 #include "LED.h"        
 
-// Static Values
-#define ADC_MAX_COUNT    	4095.0f   // ADC bit resolution
-#define LED_PIN       		5					// LD2 on board LED
-#define BUTTON_PIN  			13				// UB1 on board button
+#define ADC_MAX_COUNT     4095.0f   // 12-bit
+#define LED_PIN           5         // LD2 on PA5
+#define BUTTON_PIN        13        // PC13 = User button
 
-// Variables
-volatile float   ADC_1;							// Output from 1st ADC channel
-volatile float   ADC_2;							// Output from 2nd ADC channel
-volatile float   ADC_3;							// Output from 1st ADC channel
-volatile float   tds_ppm;						// Final TDS reading
-volatile float   temperature;				// Final temeprature reading
-volatile uint8_t sensorMode = 0;    // 0 = TDS, 1 = Temperature
+volatile float result;        // TDS raw ADC count
+volatile float tds_ppm;       // TDS in ppm
+volatile float temperature;   // temperature voltage (or converted)
+volatile uint8_t sensorMode;  // 0 = TDS, 1 = Temperature
+volatile float rawADC; 
 
-// GPIO + EXTI prototypes
-void configure_LED_pin(void);
-void configure_button_pin(void);
-void configure_EXTI(void);
-
-// LD2 for debugging
+// LD2 for blink feedback
 void configure_LED2_pin(void) {
     RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN;
-    GPIOA->MODER   &= ~(3UL << (2 * LED_PIN));
-    GPIOA->MODER   |=  (1UL << (2 * LED_PIN));
-    GPIOA->OTYPER  &= ~(1UL << LED_PIN);
-    GPIOA->PUPDR   &= ~(3UL << (2 * LED_PIN));
+    GPIOA->MODER &= ~(3UL << (2 * LED_PIN));
+    GPIOA->MODER |=  (1UL << (2 * LED_PIN));
+    GPIOA->OTYPER &= ~(1UL << LED_PIN);
+    GPIOA->PUPDR &= ~(3UL << (2 * LED_PIN));
 }
 
-// UB1 to toggle sensor modes
+// User button on PC13
 void configure_button_pin(void) {
     RCC->AHB2ENR |= RCC_AHB2ENR_GPIOCEN;
-    GPIOC->MODER   &= ~(3UL << (2 * BUTTON_PIN));
-    GPIOC->PUPDR   &= ~(3UL << (2 * BUTTON_PIN));
+    GPIOC->MODER &= ~(3UL << (2 * BUTTON_PIN));
+    GPIOC->PUPDR &= ~(3UL << (2 * BUTTON_PIN));
 }
 
-// LD2 toggle
+// simple toggle
 static inline void blink_LED(void) {
     GPIOA->ODR ^= (1UL << LED_PIN);
 }
 
-// Configure EXTi so that UB1 triggers interrupt
+// EXTI on PC13 -> interrupt on rising edge
 void configure_EXTI(void) {
     RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
     uint32_t idx   = BUTTON_PIN >> 2;
     uint32_t shift = (BUTTON_PIN & 3) * 4;
     SYSCFG->EXTICR[idx] &= ~(0xFUL << shift);
-    SYSCFG->EXTICR[idx] |=  (0x2UL << shift);
+    SYSCFG->EXTICR[idx] |=  (0x2UL << shift); // 0x2 = port C
+
     EXTI->IMR1  |=  (1UL << BUTTON_PIN);
     EXTI->RTSR1 |=  (1UL << BUTTON_PIN);
     EXTI->FTSR1 &= ~(1UL << BUTTON_PIN);
     NVIC_EnableIRQ(EXTI15_10_IRQn);
 }
 
-// EXTI handler toggles sensorMode and blinks LD2
 void EXTI15_10_IRQHandler(void) {
     if (EXTI->PR1 & (1UL << BUTTON_PIN)) {
         EXTI->PR1 |= (1UL << BUTTON_PIN);
@@ -65,85 +57,46 @@ void EXTI15_10_IRQHandler(void) {
         blink_LED();
     }
 }
- 
-// Sensor routines
 
-// TDS Sensor
+// TDS sensor read from ADC1_IN6
 void TDSSensor(void) {
-    // select PA1 -> ADC12_IN6
-    ADC_Select_Channel(6);
-    ADC1->CR |= ADC_CR_ADSTART;
-    while (!(ADC123_COMMON->CSR & ADC_CSR_EOC_MST));
-    ADC_1 = ADC1->DR;
-
-    float voltage = (ADC_1 / ADC_MAX_COUNT) * 2.3f;
-    tds_ppm  = (22.06f  * voltage * voltage * voltage)
-             + (177.8f * voltage * voltage)
-             + (353.1f * voltage)
-             + 20.67f;
-
-    if (tds_ppm > 200.0f) {
-        LED_On(3);
-    }
+    uint16_t raw = ADC1_Read();
+		rawADC = raw;
+    result = (float)raw;
+    float volt = (result / ADC_MAX_COUNT) * 2.3f;
+    tds_ppm = (22.06f  * volt * volt * volt)
+            + (177.8f  * volt * volt)
+            + (353.1f  * volt)
+            + 20.67f;
 }
 
-//Water Level Sensor
-void WaterLevel(void) {
-    // always on whatever pin you have wired
-    ADC_Select_Channel(8);
-    ADC1->CR |= ADC_CR_ADSTART;
-    while (!(ADC123_COMMON->CSR & ADC_CSR_EOC_MST));
-    ADC_2 = ADC1->DR;
-
-    if (ADC_2 < 500) {
-        LED_On(0); LED_On(1); LED_On(2);
-    }
-    else if (ADC_2 < 3600) {
-        LED_On(0); LED_On(1); LED_Off(2);
-    }
-    else if (ADC_2 < 4000) {
-        LED_On(0); LED_Off(1); LED_Off(2);
-    }
-    else {
-        LED_Off(0); LED_Off(1); LED_Off(2);
-    }
-}
-
-
-// Temperature Sensor
+// Temperature sensor read from ADC2_IN7
 void Temperature(void) {
-    // select PA2 -> ADC12_IN7
-    ADC_Select_Channel(7);
-    ADC1->CR |= ADC_CR_ADSTART;
-    while (!(ADC123_COMMON->CSR & ADC_CSR_EOC_MST));
-    ADC_3 = ADC1->DR;
-
-    // convert `result` ? volts ? °C here
-    // e.g. voltage = (result/ADC_MAX_COUNT)*V_REF;
-    //      temp_c  = (voltage - 0.5f) * 100.0f;
+    uint16_t raw = ADC2_Read();
+    // convert however your sensor needs—here we just store voltage
+    float volt = (raw / ADC_MAX_COUNT) * 2.3f;
+    rawADC = raw;
 }
 
-// Initialization and pin configuration
-void Initialize()
-{
-	  System_Clock_Init();    // clock
-    ADC_Init();						  // ADC
-    LEDs_Init();					  // External LEDs
-    configure_LED2_pin();   // LD2 (for debugging)
-    configure_button_pin(); // UB1 to toggle between sensor modes
-    configure_EXTI();				// EXTI interrupt
+void Initialize(void) {
+    System_Clock_Init();   // 80 MHz
+    ADC_Init();            // sets up ADC1@IN6 and ADC2@IN7
+    LEDs_Init();           // if you have external LEDs
+    configure_LED2_pin();  // onboard LD2 for debug blink
+    configure_button_pin();
+    configure_EXTI();
 }
 
 int main(void) {
-		
-		Initialize();
-
+    Initialize();
+    sensorMode = 0;
     while (1) {
-        //WaterLevel();
         if (sensorMode == 0) {
             TDSSensor();
         } else {
             Temperature();
         }
+        // small delay if you like
+        //SysTick_Delay_ms(200);
     }
 }
