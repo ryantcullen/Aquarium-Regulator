@@ -22,7 +22,6 @@ volatile float   temperature;    // computed temperature voltage (or converted)
 //systick counter
 volatile uint32_t msTicks = 0;     
 volatile uint8_t servoToggleFlag = 0;
-static uint32_t lastToggle = 0;
 int currentAngle = 0;
 
 void configure_SysTick(void) {
@@ -35,10 +34,13 @@ void configure_SysTick(void) {
 }
 
 void SysTick_Handler(void) {
+    static uint32_t lastToggle = 0;
     msTicks++;
-    if ((msTicks - lastToggle) >= 5000) {
+
+    static uint32_t lastServoToggle = 0;
+    if ((msTicks - lastServoToggle) >= 5000) {
         servoToggleFlag = 1;
-        lastToggle = msTicks;
+        lastServoToggle = msTicks;
     }
 }
 
@@ -230,17 +232,17 @@ int main(void) {
         }
 
         
-    if (servoToggleFlag) {
-        if (currentAngle == 0) {
-            move_servo(180);
-        currentAngle = 180;
-        } else {
-            move_servo(0);
-            currentAngle = 0;
-    }
-        servoToggleFlag = 0;
-    }   
-        // optionally delay to slow down readings
-        // SysTick_Delay_ms(200);
+				if (servoToggleFlag) {
+						if (currentAngle == 0) {
+								move_servo(180);
+						currentAngle = 180;
+						} else {
+								move_servo(0);
+								currentAngle = 0;
+						}
+						servoToggleFlag = 0;
+
+				}   
+
     }
 }
