@@ -107,9 +107,32 @@ void WaterLevel(void) {
 //— Temperature sensor routine (PA4 / IN9) —
 void Temperature(void) {
     ADC_Select_Channel(CH_TEMP);
-    rawADC = ADC_Read();
-    // convert rawADC ? voltage
-		temperature = rawADC;
+    rawADC = ADC_Read();	
+	  
+	  // Convert raw counts to voltage (in volts)
+	  float voltage = (rawADC / ADC_MAX_COUNT) * 2.2f; // gets 49-50F
+	
+	  // Calculate temperature in Celsius using the LMT86 transfer function
+    float temp_c = (voltage - 1) / -0.11f;
+	
+	  // Convert Celsius to Fahrenheit
+    float temp_f = (temp_c * 9.0f/5.0f) + 32.0f;
+	
+	  // Single-point calibration offset
+    temperature = temp_f + 23.0f;
+		
+		if (temperature < 60 ){
+			LED_On(5);
+			LED_Off(6);
+		}
+		else if (temperature > 60 ){
+			LED_Off(5);
+			LED_On(6);
+		}
+		else{
+			LED_Off(5);
+			LED_Off(6);			
+		}
 }
 
 void Initialize(void) {
