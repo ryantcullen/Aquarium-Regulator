@@ -78,7 +78,6 @@ void TDSSensor(void) {
     if (tds_ppm < 200.0f) {
 				LED_Off(0);
 				LED_Off(1);
-				LED_Off(2);
 		}
 
 }
