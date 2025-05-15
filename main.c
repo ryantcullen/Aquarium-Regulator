@@ -5,6 +5,7 @@
 #include "SysClock.h"
 #include "LED.h"        
 #include "ADC.h"
+#include "servo.h"
 
 #define ADC_MAX_COUNT   4095.0f   // 12-bit resolution
 #define LED_PIN         5         // LD2 (PA5)
@@ -20,6 +21,33 @@ volatile float   rawADC;         // latest raw ADC count
 volatile float   waterLevel;     // placeholder for water level value
 volatile float   tds_ppm;        // computed TDS
 volatile float   temperature;    // computed temperature voltage (or converted)
+
+//systick counter
+volatile uint32_t msTicks = 0;     
+volatile uint8_t servoToggleFlag = 0;
+int currentAngle = 0;
+
+// initialize systick
+void configure_SysTick(void) {
+    // 4 MHz / 4000 = 1000 Hz = 1 ms tick
+    SysTick->LOAD = 4000 - 1;
+    SysTick->VAL  = 0;
+    SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk |
+                    SysTick_CTRL_TICKINT_Msk   |
+                    SysTick_CTRL_ENABLE_Msk;
+}
+
+void Systick_Handler(void) {
+    msTicks++;
+    if (msTicks % 2000 == 0) {
+        servoToggleFlag = 1;  // Set flag
+    }
+}
+
+void delay(uint32_t ms) {
+    uint32_t start = msTicks;
+    while ((msTicks - start) < ms);
+}
 
 //— LD2 configuration for blink feedback —
 void configure_LED2_pin(void) {
@@ -57,6 +85,8 @@ void configure_timer() {
     TIM5->CR1 |= TIM_CR1_ARPE; // Enable ARR preload
     TIM5->EGR |= TIM_EGR_UG;   // Force update to load all shadow regs
     TIM5->CR1 |= TIM_CR1_CEN; // Enable the counter
+
+    TIM5->CCR3 = 50; // 180deg
 }
 
 // User button on PC13
@@ -142,6 +172,13 @@ int main(void) {
             case 0: TDSSensor(); break;
             case 1: WaterLevel(); break;
             case 2: Temperature(); break;
+        }
+
+        if (servoToggleFlag) {
+            move_servo(180);
+            delay(1000);
+            move_servo(0);
+            servoToggleFlag = 0;
         }
         // optionally delay to slow down readings
         // SysTick_Delay_ms(200);
