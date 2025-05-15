@@ -6,128 +6,163 @@
 
 /**
  * ADC.c
- *  - ADC1 on PA1 ? IN6   (TDS sensor)
- *  - ADC2 on PA4 ? IN9   (temperature or second sensor)
+ * Single-ADC implementation that switches between:
+ *   – PA0 ? ADC12_IN5 (channel 5)
+ *   – PA1 ? ADC12_IN6 (channel 6)
+ *   – PA4 ? ADC12_IN9 (channel 9)
  *
  * APIs:
  *   void     ADC_Init(void);
- *   uint16_t ADC1_Read(void);
- *   uint16_t ADC2_Read(void);
+ *   void     ADC_Select_Channel(uint8_t ch);
+ *   uint16_t ADC_Read(void);
  */
 
 //-------------------------------------------------------------------------------------------
-//  Wake up & calibrate a single ADC (ADC1 or ADC2)
+//  Wake up & calibrate ADC1
 //-------------------------------------------------------------------------------------------
-static void ADC_Startup(ADC_TypeDef *ADCx) {
+static void ADC1_Startup(void) {
     int delay;
+
     // Exit deep-power-down
-    if (ADCx->CR & ADC_CR_DEEPPWD) {
-        ADCx->CR &= ~ADC_CR_DEEPPWD;
+    if (ADC1->CR & ADC_CR_DEEPPWD) {
+        ADC1->CR &= ~ADC_CR_DEEPPWD;
     }
     // Enable internal regulator
-    ADCx->CR |= ADC_CR_ADVREGEN;
-    // Wait ~20µs for regulator startup (@80MHz)
-    delay = 20 * (80000000/1000000);
+    ADC1->CR |= ADC_CR_ADVREGEN;
+    // Wait ~20 µs for regulator startup (@80 MHz)
+    delay = 20 * (80000000 / 1000000);
     while (delay--) {}
-    // Calibrate
-    ADCx->CR |= ADC_CR_ADCAL;
-    while (ADCx->CR & ADC_CR_ADCAL) {}
+    // Self-calibration
+    ADC1->CR |= ADC_CR_ADCAL;
+    while (ADC1->CR & ADC_CR_ADCAL) {}
 }
 
 //-------------------------------------------------------------------------------------------
-//  Shared ADC common settings (all ADC1–3)
+//  ADC common settings (all ADC1–3)
 //-------------------------------------------------------------------------------------------
 void ADC_Common_Configuration(void) {
-    SYSCFG->CFGR1  |= SYSCFG_CFGR1_BOOSTEN;   // boost analog switches
-    ADC123_COMMON->CCR |= ADC_CCR_VREFEN;     // enable VREFINT
-    // clock = HCLK/1
+    // Boost analog switches at low VDDA
+    SYSCFG->CFGR1   |= SYSCFG_CFGR1_BOOSTEN;
+    // Enable VREFINT
+    ADC123_COMMON->CCR |= ADC_CCR_VREFEN;
+    // Clock = HCLK/1
     ADC123_COMMON->CCR &= ~ADC_CCR_CKMODE;
     ADC123_COMMON->CCR |=  ADC_CCR_CKMODE_0;
-    ADC123_COMMON->CCR &= ~ADC_CCR_PRESC;     // presc = /1
-    // independent mode
+    // Prescaler = /1
+    ADC123_COMMON->CCR &= ~ADC_CCR_PRESC;
+    // Independent mode
     ADC123_COMMON->CCR &= ~ADC_CCR_DUAL;
 }
 
 //-------------------------------------------------------------------------------------------
-//  Configure PA1, PA2, PA4 as analog inputs
+//  Configure PA0, PA1, PA4 as analog inputs
 //-------------------------------------------------------------------------------------------
 void ADC_Pin_Init(void) {
-    // enable GPIOA clock
+    // Enable GPIOA clock
     RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN;
-    // PA1, PA2, PA4 -> analog mode (11), no pull-up/down
-    GPIOA->MODER |=  (3U<<(2*1)) | (3U<<(2*2)) | (3U<<(2*4));
-    GPIOA->PUPDR &= ~((3U<<(2*1)) | (3U<<(2*2)) | (3U<<(2*4)));
-    // connect analog switch
-    GPIOA->ASCR  |= (1U<<1) | (1U<<2) | (1U<<4);
+
+    // PA0, PA1, PA4 ? analog mode (MODER=11), no pull (PUPDR=00)
+    GPIOA->MODER |=  
+        (3U << (2*0)) |  // PA0
+        (3U << (2*1)) |  // PA1
+        (3U << (2*4));   // PA4
+
+    GPIOA->PUPDR &= ~(
+        (3U << (2*0)) |
+        (3U << (2*1)) |
+        (3U << (2*4)));
+
+    // Connect analog switches
+    GPIOA->ASCR  |= 
+        (1U << 0) |
+        (1U << 1) |
+        (1U << 4);
 }
 
 //-------------------------------------------------------------------------------------------
-//  Initialize ADC1 (IN6) & ADC2 (IN9)
+//  Initialize ADC1 for channels 5, 6, and 9
 //-------------------------------------------------------------------------------------------
 void ADC_Init(void) {
-    // enable & reset ADC common clock
+    // 1) Enable & reset ADC common clock
     RCC->AHB2ENR  |= RCC_AHB2ENR_ADCEN;
     RCC->AHB2RSTR |= RCC_AHB2RSTR_ADCRST;
     (void)RCC->AHB2RSTR;
     RCC->AHB2RSTR &= ~RCC_AHB2RSTR_ADCRST;
 
-    // shared setup
+    // 2) Shared setup
     ADC_Pin_Init();
     ADC_Common_Configuration();
 
-    // ----- ADC1 (PA1 ? IN6) -----
-    ADC_Startup(ADC1);
+    // 3) Wake up & calibrate
+    ADC1_Startup();
+
+    // 4) Configure ADC1
     ADC1->CFGR &= ~(ADC_CFGR_RES | ADC_CFGR_ALIGN | ADC_CFGR_CONT);
-    ADC1->SQR1 &= ~0x0000000FU;          // length = 1
-    ADC1->SQR1 |=  (6U << 6);            // SQ1 = channel 6
-    ADC1->DIFSEL &= ~(1U << 6);          // single-ended
-    // sample time 247.5 cycles on SMP6 ([20:18])
-    ADC1->SMPR1 &= ~((0x7UL<<18)|(0x7UL<<21));
-    ADC1->SMPR1 |=  (6U << 18);
-    ADC1->CFGR &= ~ADC_CFGR_EXTEN;       // SW start only
-    ADC1->CR   |=  ADC_CR_ADEN;          // enable ADC1
+    ADC1->SQR1 &= ~0x0000000FU;           // regular sequence length = 1
+    // default to channel 5 (PA0)
+    ADC1->SQR1 |=  (5U << 6);             // SQ1[4:0] = 5
+    ADC1->DIFSEL &= ~(1U << 5);           // single-ended IN5
+
+    // 5) Sample-time: 247.5 cycles for channels 5,6,9
+    ADC1->SMPR1 &= ~(
+        (0x7UL << 15) |   // SMP5 bits [17:15]
+        (0x7UL << 18) |   // SMP6 bits [20:18]
+        (0x7UL << 27));   // SMP9 bits [29:27]
+    ADC1->SMPR1 |= 
+        (6U << 15) |      // IN5
+        (6U << 18) |      // IN6
+        (6U << 27);       // IN9
+
+    // 6) Software trigger only
+    ADC1->CFGR &= ~ADC_CFGR_EXTEN;
+
+    // 7) Enable ADC1
+    ADC1->CR |= ADC_CR_ADEN;
     while (!(ADC1->ISR & ADC_ISR_ADRDY)) {}
-
-    // ----- ADC2 (PA4 ? IN9) -----
-    ADC_Startup(ADC2);
-    ADC2->CFGR &= ~(ADC_CFGR_RES | ADC_CFGR_ALIGN | ADC_CFGR_CONT);
-    ADC2->SQR1 &= ~(0x1FUL << 6);
-    ADC2->SQR1 |=  (9U << 6);            // SQ1 = channel 9
-    ADC2->DIFSEL &= ~(1U << 9);
-    // sample time 247.5 cycles on SMP9 ([29:27])
-    ADC2->SMPR1 &= ~(0x7UL << 27);
-    ADC2->SMPR1 |=  (6U << 27);
-    ADC2->CFGR &= ~ADC_CFGR_EXTEN;
-    ADC2->CR   |=  ADC_CR_ADEN;          // enable ADC2
-    while (!(ADC2->ISR & ADC_ISR_ADRDY)) {}
 }
 
 //-------------------------------------------------------------------------------------------
-//  Read one-shot from ADC1 (IN6)
+//  Switch ADC1 between channel 5, 6, or 9
 //-------------------------------------------------------------------------------------------
-uint16_t ADC1_Read(void) {
-    ADC1->ISR |= ADC_ISR_EOC;           // clear old flag
-    ADC1->CR  |= ADC_CR_ADSTART;        // start conversion
+void ADC_Select_Channel(uint8_t ch) {
+    if (ch!=5 && ch!=6 && ch!=9) return;
+
+    // wait for any ongoing conversion to finish
+    while (ADC1->CR & ADC_CR_ADSTART) {}
+
+    // set SQ1[4:0] = ch
+    ADC1->SQR1 &= ~(0x1FUL << 6);
+    ADC1->SQR1 |=  (ch << 6);
+
+    // single-ended
+    ADC1->DIFSEL &= ~(1U << ch);
+
+    // adjust sample-time just for this channel
+    ADC1->SMPR1 &= ~(
+        (0x7UL << 15) |
+        (0x7UL << 18) |
+        (0x7UL << 27));
+    if (ch == 5) {
+        ADC1->SMPR1 |= (6U << 15);
+    } else if (ch == 6) {
+        ADC1->SMPR1 |= (6U << 18);
+    } else {
+        ADC1->SMPR1 |= (6U << 27);
+    }
+}
+
+//-------------------------------------------------------------------------------------------
+//  Start a single conversion on the selected channel, wait for EOC, return data
+//-------------------------------------------------------------------------------------------
+uint16_t ADC_Read(void) {
+    // clear old flag
+    ADC1->ISR |= ADC_ISR_EOC;
+    // start conversion
+    ADC1->CR  |= ADC_CR_ADSTART;
+    // wait for end of conversion
     while (!(ADC1->ISR & ADC_ISR_EOC)) {}
-    ADC1->ISR |= ADC_ISR_EOC;           // clear flag
+    // clear flag
+    ADC1->ISR |= ADC_ISR_ADRDY;
+    // read result
     return (uint16_t)ADC1->DR;
-}
-
-//-------------------------------------------------------------------------------------------
-//  Read one-shot from ADC2 (IN9)
-//-------------------------------------------------------------------------------------------
-uint16_t ADC2_Read(void) {
-    ADC2->ISR |= ADC_ISR_EOC;
-    ADC2->CR  |= ADC_CR_ADSTART;
-    while (!(ADC2->ISR & ADC_ISR_EOC)) {}
-    ADC2->ISR |= ADC_ISR_EOC;
-    return (uint16_t)ADC2->DR;
-}
-
-//-------------------------------------------------------------------------------------------
-//  Shared ADC1/2 IRQ handler (optional)
-//-------------------------------------------------------------------------------------------
-void ADC1_2_IRQHandler(void) {
-    if (ADC1->ISR & ADC_ISR_EOC) ADC1->ISR |= ADC_ISR_EOC;
-    if (ADC2->ISR & ADC_ISR_EOC) ADC2->ISR |= ADC_ISR_EOC;
 }
