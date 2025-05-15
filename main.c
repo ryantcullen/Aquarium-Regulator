@@ -110,6 +110,12 @@ void EXTI15_10_IRQHandler(void) {
         EXTI->PR1 |= (1UL << BUTTON_PIN);
         // cycle through 0,1,2
         sensorMode = (sensorMode + 1) % 3;
+				LED_Off(0);
+				LED_Off(1);
+				LED_Off(3);
+				LED_Off(4);
+				LED_Off(5);
+				LED_Off(6);
         blink_LED();
     }
 }
@@ -191,7 +197,6 @@ void Temperature(void) {
 		}
 }
 
-#include "stm32l476xx.h"
 
 void move_servo(uint32_t angle) {
     if (angle > 180) angle = 180;  // Clamp input to valid range

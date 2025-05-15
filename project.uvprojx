@@ -410,11 +410,6 @@
               <FilePath>.\LED.c</FilePath>
             </File>
             <File>
-              <FileName>SysTimer.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\SysTimer.c</FilePath>
-            </File>
-            <File>
               <FileName>SysClock.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\SysClock.c</FilePath>
