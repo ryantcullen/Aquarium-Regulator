@@ -35,7 +35,7 @@ void configure_SysTick(void) {
 
 void SysTick_Handler(void) {
     msTicks++;
-    if (msTicks % 2000 == 0) {
+    if (msTicks % 10000 == 0) {
         servoToggleFlag = 1;  // Set flag
     }
 }
