@@ -1,5 +1,4 @@
 // main.c
-
 #include "stm32l476xx.h"
 #include "ADC.h"
 #include "SysClock.h"
@@ -20,7 +19,33 @@ volatile float   waterLevel;     // placeholder for water level value
 volatile float   tds_ppm;        // computed TDS
 volatile float   temperature;    // computed temperature voltage (or converted)
 
-//— LD2 configuration for blink feedback —
+//systick counter
+volatile uint32_t msTicks = 0;     
+volatile uint8_t servoToggleFlag = 0;
+int currentAngle = 0;
+
+void configure_SysTick(void) {
+    // 80 MHz / 80000 = 1000 Hz = 1 ms tick
+    SysTick->LOAD = 80000 - 1;
+    SysTick->VAL  = 0;
+    SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk |
+                    SysTick_CTRL_TICKINT_Msk   |
+                    SysTick_CTRL_ENABLE_Msk;
+}
+
+void SysTick_Handler(void) {
+    msTicks++;
+    if (msTicks % 2000 == 0) {
+        servoToggleFlag = 1;  // Set flag
+    }
+}
+
+void delay(uint32_t ms) {
+    uint32_t start = msTicks;
+    while ((msTicks - start) < ms);
+}
+
+//ï¿½ LD2 configuration for blink feedback ï¿½
 void configure_LED2_pin(void) {
     RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN;
     GPIOA->MODER   &= ~(3UL << (2 * LED_PIN));
@@ -32,7 +57,37 @@ static inline void blink_LED(void) {
     GPIOA->ODR ^= (1UL << LED_PIN);
 }
 
-//— Button on PC13 ? EXTI —
+void configure_PA6() {
+	RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN;  // Enable GPIOA clock
+	GPIOA->MODER &= ~(3 << (6 * 2));	  // Clear mode bits for PA6
+	GPIOA->MODER |=  (2 << (6 * 2));	  // Set alternate function mode
+	GPIOA->AFR[0] &= ~(0b1111 << (6 * 4)); // Clear AF bits for PA6 (AFR[0] = AFRL)
+	GPIOA->AFR[0] |=  (2 << (6 * 4));	  // AF2 (0010) = TIM3_CH1, leftshift 4 b/c its PA6
+	GPIOA->OTYPER &= ~(1 << 6);			  // Push-pull
+	GPIOA->PUPDR  &= ~(3 << (6 * 2));	  // No pull-up/pull-down
+}
+
+
+// configure timer for 50hz PWM
+// TIM5_CH3 on PA2
+void configure_timer() {
+    RCC->APB1ENR1 |= RCC_APB1ENR1_TIM3EN;              // enable TIM3 clock
+    TIM3->PSC = 1599;                                  // 80 MHz / (1599 + 1) = 50 kHz
+    TIM3->ARR = 999;                                   // 50 kHz / (999 + 1) = 50 Hz (20 ms PWM period)
+    TIM3->CCMR1 &= ~(0b111 << 4);                      // Clear OC1M bits (CH1)
+    TIM3->CCMR1 |= (0b110 << 4);                       // Set OC1M = 110 (PWM Mode 1)
+    TIM3->CCMR1 |= TIM_CCMR1_OC1PE;                    // Enable CCR1 preload
+    TIM3->CCER &= ~TIM_CCER_CC1P;                      // Active high polarity for servo
+    TIM3->CCER |= TIM_CCER_CC1E;                       // Enable output for TIM3_CH1
+    TIM3->CR1 |= TIM_CR1_ARPE;                         // Enable ARR preload
+    TIM3->EGR |= TIM_EGR_UG;                           // Force update to load all shadow regs
+    TIM3->CR1 |= TIM_CR1_CEN;                          // Enable the counter
+
+    TIM3->CCR1 = 50;                                   // 180deg
+}
+
+
+//ï¿½ Button on PC13 ? EXTI ï¿½
 void configure_button_pin(void) {
     RCC->AHB2ENR |= RCC_AHB2ENR_GPIOCEN;
     GPIOC->MODER &= ~(3UL << (2 * BUTTON_PIN));
@@ -49,6 +104,7 @@ void configure_EXTI(void) {
     EXTI->FTSR1 &= ~(1UL << BUTTON_PIN);
     NVIC_EnableIRQ(EXTI15_10_IRQn);
 }
+
 void EXTI15_10_IRQHandler(void) {
     if (EXTI->PR1 & (1UL << BUTTON_PIN)) {
         EXTI->PR1 |= (1UL << BUTTON_PIN);
@@ -58,7 +114,7 @@ void EXTI15_10_IRQHandler(void) {
     }
 }
 
-//— TDS sensor routine (PA0 / IN5) —
+//ï¿½ TDS sensor routine (PA0 / IN5) ï¿½
 void TDSSensor(void) {
     ADC_Select_Channel(CH_TDS);
     rawADC = ADC_Read();
@@ -82,7 +138,7 @@ void TDSSensor(void) {
 
 }
 
-//— Water level sensor routine (PA1 / IN6) —
+//ï¿½ Water level sensor routine (PA1 / IN6) ï¿½
 void WaterLevel(void) {
     ADC_Select_Channel(CH_WATER);
     rawADC = ADC_Read();
@@ -104,7 +160,7 @@ void WaterLevel(void) {
 				}
 }
 
-//— Temperature sensor routine (PA4 / IN9) —
+//ï¿½ Temperature sensor routine (PA4 / IN9) ï¿½
 void Temperature(void) {
     ADC_Select_Channel(CH_TEMP);
     rawADC = ADC_Read();	
@@ -135,6 +191,16 @@ void Temperature(void) {
 		}
 }
 
+#include "stm32l476xx.h"
+
+void move_servo(uint32_t angle) {
+    if (angle > 180) angle = 180;  // Clamp input to valid range
+    float ticks = (angle / 180.0f) * 50.0f + 50.0f;
+
+    TIM3->CCR1 = (uint32_t)ticks;
+}
+
+
 void Initialize(void) {
     System_Clock_Init();    // 80 MHz
     ADC_Init();             // single-ADC setup for channels 5, 6, 9
@@ -142,6 +208,8 @@ void Initialize(void) {
     configure_LED2_pin();   // onboard LD2
     configure_button_pin();
     configure_EXTI();
+    configure_PA6();
+    configure_timer();
     sensorMode = 0;         // start in water-level mode
 }
 
@@ -153,6 +221,14 @@ int main(void) {
             case 1: WaterLevel(); break;
             case 2: Temperature(); break;
         }
+
+        
+    if (servoToggleFlag) {
+                move_servo(180);
+                delay(1000);
+                move_servo(0);
+                servoToggleFlag = 0;
+            }
         // optionally delay to slow down readings
         // SysTick_Delay_ms(200);
     }
