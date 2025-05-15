@@ -128,7 +128,7 @@ void TDSSensor(void) {
     tds_ppm =  22.06f*volt*volt*volt
             +177.8f *volt*volt
             +353.1f *volt
-            +20.67f;
+            +7.67f;
 
 	
     if (tds_ppm > 200.0f) {
