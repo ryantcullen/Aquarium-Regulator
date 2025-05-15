@@ -4,6 +4,7 @@
 #include "ADC.h"
 #include "SysClock.h"
 #include "LED.h"        
+#include "ADC.h"
 
 #define ADC_MAX_COUNT   4095.0f   // 12-bit resolution
 #define LED_PIN         5         // LD2 (PA5)
@@ -20,7 +21,7 @@ volatile float   waterLevel;     // placeholder for water level value
 volatile float   tds_ppm;        // computed TDS
 volatile float   temperature;    // computed temperature voltage (or converted)
 
-//— LD2 configuration for blink feedback —
+//â€” LD2 configuration for blink feedback â€”
 void configure_LED2_pin(void) {
     RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN;
     GPIOA->MODER   &= ~(3UL << (2 * LED_PIN));
@@ -32,7 +33,34 @@ static inline void blink_LED(void) {
     GPIOA->ODR ^= (1UL << LED_PIN);
 }
 
-//— Button on PC13 ? EXTI —
+void configure_PA2() {
+    RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN; // Enable GPIOA clock
+	GPIOA->MODER &= ~(3 << (2 * 2));	 // Clear mode bits for PA2
+	GPIOA->MODER |= (2 << (2 * 2));		 // Set alternate function mode
+	GPIOA->AFR[0] &= ~(0b1111 << (2 * 4));	 // Clear AF bits for PA2 (AFR[0] = AFRL)
+	GPIOA->AFR[0] |= (2 << (2 * 4));	 // AF2 (0010) = TIM5_CH3, leftshift 4 b/c its PA2
+	GPIOA->OTYPER &= ~(1 << 2);			 // Push-pull
+	GPIOA->PUPDR &= ~(3 << (2 * 2));	 // No pull-up/pull-down
+}
+
+// configure timer for 50hz PWM
+// TIM5_CH3 on PA2
+void configure_timer() {
+    RCC->APB1ENR1 |= RCC_APB1ENR1_TM5EN;
+    TIM5->PSC = 79
+    TIM5->ARR = 999;
+    TIM5->CCMR1 &= ~(0b111 << 4); // Clear OC3M bits (CH3)
+    TIM5->CCMR1 |= (0b110 << 4);  // Set OC3M = 110 (PWM Mode 1)
+    TIM5->CCMR1 |= TIM_CCMR1_OC3PE; // Enable CCR3 preload
+    TIM5->CCER &= ~TIM_CCER_CC3P; // Active high polarity for servo
+    TIM5->CCER |= TIM_CCER_CC3E;  // Enable output for TIM5_CH3
+    TIM5->CR1 |= TIM_CR1_ARPE; // Enable ARR preload
+    TIM5->EGR |= TIM_EGR_UG;   // Force update to load all shadow regs
+    TIM5->CR1 |= TIM_CR1_CEN; // Enable the counter
+}
+
+// User button on PC13
+//â€” Button on PC13 ? EXTI â€”
 void configure_button_pin(void) {
     RCC->AHB2ENR |= RCC_AHB2ENR_GPIOCEN;
     GPIOC->MODER &= ~(3UL << (2 * BUTTON_PIN));
@@ -58,7 +86,7 @@ void EXTI15_10_IRQHandler(void) {
     }
 }
 
-//— TDS sensor routine (PA0 / IN5) —
+//â€” TDS sensor routine (PA0 / IN5) â€”
 void TDSSensor(void) {
     ADC_Select_Channel(CH_TDS);
     rawADC = ADC_Read();
@@ -79,7 +107,7 @@ void TDSSensor(void) {
 
 }
 
-//— Water level sensor routine (PA1 / IN6) —
+//â€” Water level sensor routine (PA1 / IN6) â€”
 void WaterLevel(void) {
     ADC_Select_Channel(CH_WATER);
     rawADC = ADC_Read();
@@ -87,7 +115,7 @@ void WaterLevel(void) {
     waterLevel = rawADC;
 }
 
-//— Temperature sensor routine (PA4 / IN9) —
+//â€” Temperature sensor routine (PA4 / IN9) â€”
 void Temperature(void) {
     ADC_Select_Channel(CH_TEMP);
     rawADC = ADC_Read();
@@ -102,6 +130,8 @@ void Initialize(void) {
     configure_LED2_pin();   // onboard LD2
     configure_button_pin();
     configure_EXTI();
+    configure_PA2();
+    configure_timer();
     sensorMode = 0;         // start in water-level mode
 }
 
