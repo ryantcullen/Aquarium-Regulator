@@ -67,14 +67,18 @@ void TDSSensor(void) {
             +177.8f *volt*volt
             +353.1f *volt
             +20.67f;
-		
-		// LED 0 -> tds_ppm > 200
-    if (tds_ppm > 200.0f) {
+
+	
+    if (tds_ppm > 300.0f) {
         LED_On(0);
 		}
-		else
-		{
+		if (tds_ppm > 500.0f) {
+        LED_On(1);
+		}
+    if (tds_ppm < 200.0f) {
 				LED_Off(0);
+				LED_Off(1);
+				LED_Off(2);
 		}
 
 }
@@ -83,8 +87,26 @@ void TDSSensor(void) {
 void WaterLevel(void) {
     ADC_Select_Channel(CH_WATER);
     rawADC = ADC_Read();
-    // TODO: convert rawADC ? actual water level units
-    waterLevel = rawADC;
+		if (rawADC < 500){
+				LED_On(3);
+				LED_On(4);
+				LED_On(5);
+				}
+				else if (rawADC < 3000){
+				LED_On(3);
+				LED_On(4);
+				LED_Off(5);
+				}
+				else if (rawADC < 3700){
+				LED_On(3);
+				LED_Off(4);
+				LED_Off(5);
+				}
+				else{
+				LED_Off(3);
+				LED_Off(4);
+				LED_Off(5);
+				}
 }
 
 //— Temperature sensor routine (PA4 / IN9) —
