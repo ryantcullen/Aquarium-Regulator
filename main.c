@@ -205,7 +205,6 @@ void move_servo(uint32_t angle) {
     TIM3->CCR1 = (uint32_t)ticks;
 }
 
-
 void Initialize(void) {
     System_Clock_Init();    // 80 MHz
     ADC_Init();             // single-ADC setup for channels 5, 6, 9
@@ -213,6 +212,7 @@ void Initialize(void) {
     configure_LED2_pin();   // onboard LD2
     configure_button_pin();
     configure_EXTI();
+    configure_SysTick();
     configure_PA6();
     configure_timer();
     sensorMode = 0;         // start in water-level mode
