@@ -131,7 +131,7 @@ void TDSSensor(void) {
             +20.67f;
 
 	
-    if (tds_ppm > 300.0f) {
+    if (tds_ppm > 200.0f) {
         LED_On(0);
 		}
 		if (tds_ppm > 500.0f) {
