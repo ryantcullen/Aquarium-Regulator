@@ -61,33 +61,35 @@ static inline void blink_LED(void) {
     GPIOA->ODR ^= (1UL << LED_PIN);
 }
 
-void configure_PA2() {
-    RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN; // Enable GPIOA clock
-	GPIOA->MODER &= ~(3 << (2 * 2));	 // Clear mode bits for PA2
-	GPIOA->MODER |= (2 << (2 * 2));		 // Set alternate function mode
-	GPIOA->AFR[0] &= ~(0b1111 << (2 * 4));	 // Clear AF bits for PA2 (AFR[0] = AFRL)
-	GPIOA->AFR[0] |= (2 << (2 * 4));	 // AF2 (0010) = TIM5_CH3, leftshift 4 b/c its PA2
-	GPIOA->OTYPER &= ~(1 << 2);			 // Push-pull
-	GPIOA->PUPDR &= ~(3 << (2 * 2));	 // No pull-up/pull-down
+void configure_PA6() {
+	RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN;  // Enable GPIOA clock
+	GPIOA->MODER &= ~(3 << (6 * 2));	  // Clear mode bits for PA6
+	GPIOA->MODER |=  (2 << (6 * 2));	  // Set alternate function mode
+	GPIOA->AFR[0] &= ~(0b1111 << (6 * 4)); // Clear AF bits for PA6 (AFR[0] = AFRL)
+	GPIOA->AFR[0] |=  (2 << (6 * 4));	  // AF2 (0010) = TIM3_CH1, leftshift 4 b/c its PA6
+	GPIOA->OTYPER &= ~(1 << 6);			  // Push-pull
+	GPIOA->PUPDR  &= ~(3 << (6 * 2));	  // No pull-up/pull-down
 }
+
 
 // configure timer for 50hz PWM
 // TIM5_CH3 on PA2
 void configure_timer() {
-    RCC->APB1ENR1 |= RCC_APB1ENR1_TM5EN;
-    TIM5->PSC = 79
-    TIM5->ARR = 999;
-    TIM5->CCMR1 &= ~(0b111 << 4); // Clear OC3M bits (CH3)
-    TIM5->CCMR1 |= (0b110 << 4);  // Set OC3M = 110 (PWM Mode 1)
-    TIM5->CCMR1 |= TIM_CCMR1_OC3PE; // Enable CCR3 preload
-    TIM5->CCER &= ~TIM_CCER_CC3P; // Active high polarity for servo
-    TIM5->CCER |= TIM_CCER_CC3E;  // Enable output for TIM5_CH3
-    TIM5->CR1 |= TIM_CR1_ARPE; // Enable ARR preload
-    TIM5->EGR |= TIM_EGR_UG;   // Force update to load all shadow regs
-    TIM5->CR1 |= TIM_CR1_CEN; // Enable the counter
+    RCC->APB1ENR1 |= RCC_APB1ENR1_TIM3EN;              // enable TIM3 clock
+    TIM3->PSC = 79;         
+    TIM3->ARR = 999;                                    
+    TIM3->CCMR1 &= ~(0b111 << 4);                      // Clear OC1M bits (CH1)
+    TIM3->CCMR1 |= (0b110 << 4);                       // Set OC1M = 110 (PWM Mode 1)
+    TIM3->CCMR1 |= TIM_CCMR1_OC1PE;                    // Enable CCR1 preload
+    TIM3->CCER &= ~TIM_CCER_CC1P;                      // Active high polarity for servo
+    TIM3->CCER |= TIM_CCER_CC1E;                       // Enable output for TIM3_CH1
+    TIM3->CR1 |= TIM_CR1_ARPE;                         // Enable ARR preload
+    TIM3->EGR |= TIM_EGR_UG;                           // Force update to load all shadow regs
+    TIM3->CR1 |= TIM_CR1_CEN;                          // Enable the counter
 
-    TIM5->CCR3 = 50; // 180deg
+    TIM3->CCR1 = 50;                                   // 180deg
 }
+
 
 // User button on PC13
 //— Button on PC13 ? EXTI —
@@ -96,6 +98,7 @@ void configure_button_pin(void) {
     GPIOC->MODER &= ~(3UL << (2 * BUTTON_PIN));
     GPIOC->PUPDR &= ~(3UL << (2 * BUTTON_PIN));
 }
+
 void configure_EXTI(void) {
     RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
     uint32_t idx   = BUTTON_PIN >> 2;
@@ -160,7 +163,7 @@ void Initialize(void) {
     configure_LED2_pin();   // onboard LD2
     configure_button_pin();
     configure_EXTI();
-    configure_PA2();
+    configure_PA6();
     configure_timer();
     sensorMode = 0;         // start in water-level mode
 }
