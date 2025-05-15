@@ -55,6 +55,13 @@ void EXTI15_10_IRQHandler(void) {
         // cycle through 0,1,2
         sensorMode = (sensorMode + 1) % 3;
         blink_LED();
+				LED_Off(0);
+				LED_Off(1);
+				LED_Off(3);
+				LED_Off(4);
+				LED_Off(5);
+				LED_Off(6);
+				
     }
 }
 
