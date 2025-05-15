@@ -15,9 +15,9 @@
 
 volatile uint8_t sensorMode;      // 0 = Water, 1 = TDS, 2 = Temperature
 volatile float   rawADC;         // latest raw ADC count
-volatile float   waterLevel;     // placeholder for water level value
-volatile float   tds_ppm;        // computed TDS
-volatile float   temperature;    // computed temperature voltage (or converted)
+volatile float   waterLevel;     // calibrated water level
+volatile float   tds_ppm;        // calibrated TDS
+volatile float   temperature;    // calibrated temperature
 
 //systick counter
 volatile uint32_t msTicks = 0;     
@@ -214,12 +214,12 @@ void Initialize(void) {
     ADC_Init();             // single-ADC setup for channels 5, 6, 9
     LEDs_Init();            // if you have external LEDs
     configure_LED2_pin();   // onboard LD2
-    configure_button_pin();
-    configure_EXTI();
-    configure_SysTick();
-    configure_PA6();
-    configure_timer();
-    sensorMode = 0;         // start in water-level mode
+    configure_button_pin();	// onboard UB1
+    configure_EXTI();				// interrupt for button
+    configure_SysTick();		// SysTick to control motor interval
+    configure_PA6();				// configure PA6 for PWM
+    configure_timer();			// configure timer
+    sensorMode = 0;         // start in TDS mode
 }
 
 int main(void) {
