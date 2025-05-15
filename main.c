@@ -89,22 +89,18 @@ void WaterLevel(void) {
 		if (rawADC < 500){
 				LED_On(3);
 				LED_On(4);
-				LED_On(5);
 				}
 				else if (rawADC < 3000){
 				LED_On(3);
 				LED_On(4);
-				LED_Off(5);
 				}
 				else if (rawADC < 3700){
 				LED_On(3);
 				LED_Off(4);
-				LED_Off(5);
 				}
 				else{
 				LED_Off(3);
 				LED_Off(4);
-				LED_Off(5);
 				}
 }
 
