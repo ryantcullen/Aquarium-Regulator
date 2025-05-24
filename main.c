@@ -129,10 +129,12 @@ void TDSSensor(void) {
     ADC_Select_Channel(CH_TDS);
     rawADC = ADC_Read();
     float volt = (rawADC / ADC_MAX_COUNT) * 2.3f;
-    tds_ppm =  22.06f*volt*volt*volt
-            +177.8f *volt*volt
-            +353.1f *volt
-            +7.67f;
+		// Direct raw-count to ppm conversion
+		tds_ppm = (1.28603e-8f * rawADC * rawADC * rawADC)
+              + (3.17711e-5f * rawADC * rawADC)
+              + (0.2155523f * rawADC)
+              + 18.99510f;
+
 
 	
     if (tds_ppm > 200.0f) {
@@ -200,6 +202,7 @@ void Temperature(void) {
 			LED_Off(6);			
 		}
 }
+
 
 
 void move_servo(uint32_t angle) {
